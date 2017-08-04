@@ -5,6 +5,9 @@
 #include <SPI.h> //SPI.h must be included as DMD is written by SPI (the IDE complains otherwise)
 #include <DMD.h>        //
 
+
+#include <string.h>  
+
   //Fire up the DMD library as dmd
 #define DISPLAYS_ACROSS 3
 #define DISPLAYS_DOWN 1
@@ -24,11 +27,12 @@ void ScanDMD()
 static uint32_t last;
 long timer;
 bool flagM = false;
+uint8_t devID;
 
 //Declare some helper function
 void modeSwitch(char* str);
 void printImg(char* buf);
-void drawImg(const int x, const int y );
+void drawImg(const int x, const int y, uint8_t* img);
 
 
 ///
@@ -63,12 +67,16 @@ void wifiCb(void* response) {
 
 bool connected;
 
+char* panel = "/ipanel000/command";
+
 // Callback when MQTT is connected
 void mqttConnected(void* response) {
   Serial.println("MQTT connected!");
   //mqtt.subscribe("AS/FirstDoor/server_response");
  // mqtt.subscribe("AS/FirstDoor/server_data");
-  mqtt.subscribe("/ipanel/command");
+  //mqtt.subscribe("/ipanel/command");
+  mqtt.subscribe(panel);
+  //Serial.println(panel); // Debug
   
   connected = true;
 }
@@ -118,6 +126,15 @@ void setup() {
   } while(!ok);
   Serial.println("EL-Client synced!");
 
+  devID = esp.Sync_ID();
+
+  char _devID[3];
+  itoa(devID, _devID, 10);
+  strcpy(panel,"/ipanel");
+  strcat(panel, _devID);
+  strcat(panel, "/command");
+  delete[] _devID;
+
   // Set-up callbacks for events and initialize with es-link.
   mqtt.connectedCb.attach(mqttConnected);
   mqtt.disconnectedCb.attach(mqttDisconnected);
@@ -151,6 +168,8 @@ void loop() {
       timer = millis();
     }
 }
+
+uint8_t Img[64];
 
 void modeSwitch(char* str)
 {
@@ -216,9 +235,11 @@ void modeSwitch(char* str)
     {
       dmd.clearScreen( true );
       
-      pch = strtok(NULL, "#\n");
-      
-      printImg(pch);
+      pch = strtok(NULL, "#");
+      Img[0] = pch;
+      Serial.println(Img[0]);  //debug
+
+      //printImg(pch);
       flagM = false;
       
       break;
@@ -227,52 +248,60 @@ void modeSwitch(char* str)
     {
       dmd.clearScreen(true);
 
-      drawImg(0,0);
+      int i = 0;
+      while(pch != NULL)
+      {
+        pch = strtok(NULL, "#");
+        Img[i] = strtol(pch, nullptr, 16);
+        i++;
+      }
+
+      drawImg(0,0, Img);
       flagM = false;
       break;
     }
-    case 6:
-    {
+    // case 6:
+    // {
       
-      drawImg(32,0);
-      flagM = false;
-      break;
-    }
+    //   drawImg(32,0);
+    //   flagM = false;
+    //   break;
+    // }
   }
 
 return 0; 
 }
 
-void printImg(char* buf)
-{
-//  Serial.println(buf);  //debug
-//  Serial.println(strlen(buf));  //debug
-  int i = 0;
-  int len = strlen(buf); 
+// void printImg(char* buf)
+// {
+// //  Serial.println(buf);  //debug
+// //  Serial.println(strlen(buf));  //debug
+//   int i = 0;
+//   int len = strlen(buf); 
   
-  for (byte y = 0; y < DMD_PIXELS_DOWN; y++) {
-    for (byte x = 0; x < DMD_PIXELS_ACROSS*DISPLAYS_ACROSS; x++) {
-      if (buf[i] == '1' && i <= len) {
-//        Serial.print("i");  //debug
-//        Serial.println(i);  //debug
-        dmd.writePixel(x, y, GRAPHICS_NORMAL, true);
+//   for (byte y = 0; y < DMD_PIXELS_DOWN; y++) {
+//     for (byte x = 0; x < DMD_PIXELS_ACROSS*DISPLAYS_ACROSS; x++) {
+//       if (buf[i] == '1' && i <= len) {
+// //        Serial.print("i");  //debug
+// //        Serial.println(i);  //debug
+//         dmd.writePixel(x, y, GRAPHICS_NORMAL, true);
         
-      }
-      i++;
-    }
-  }
-}
+//       }
+//       i++;
+//     }
+//   }
+// }
 
 //Test Images
-const static uint8_t TestImg[] = 
-   {0x00, 0x00, 0x00, 0x40, 0x40, 0xC0, 0xC0, 0xC0, 0x60, 0x20, 0x20, 0x30, 0x10, 0x18, 0x08, 0x0C, 0x04, 0x04, 0x0C, 0x18, 0x30,  0x18, 0x08, 0x0D, 0x05, 0x06, 0x06, 0x06, 0x06, 0x00, 0x00, 0x00,  
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x03, 0x0E, 0x18, 0x10, 0x20, 0x60, 0x40, 0x40, 0x60, 0x20, 0x20, 0x30, 0x10, 0x20, 0x60, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+// const static uint8_t TestImg[] = 
+//    {0x00, 0x00, 0x00, 0x40, 0x40, 0xC0, 0xC0, 0xC0, 0x60, 0x20, 0x20, 0x30, 0x10, 0x18, 0x08, 0x0C, 0x04, 0x04, 0x0C, 0x18, 0x30,  0x18, 0x08, 0x0D, 0x05, 0x06, 0x06, 0x06, 0x06, 0x00, 0x00, 0x00,  
+// 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x03, 0x0E, 0x18, 0x10, 0x20, 0x60, 0x40, 0x40, 0x60, 0x20, 0x20, 0x30, 0x10, 0x20, 0x60, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
-const static uint8_t TestImg2[] = 
-{0x00,0x00,0x00,0x00,0x00,0x00,0x08,0x08,0x1E,0x68,0x1E,0x08,0x08,0x00,0x00,0x00,0x00,0x00,0x00,0x80,0xE0,0xB0,0xE0,0x80,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 
-0x00,0x00,0x20,0x78,0x2C,0x78,0x20,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x01,0x00,0x00,0x00,0x10,0x38,0x6C,0x38,0x10,0x00};
+// const static uint8_t TestImg2[] = 
+// {0x00,0x00,0x00,0x00,0x00,0x00,0x08,0x08,0x1E,0x68,0x1E,0x08,0x08,0x00,0x00,0x00,0x00,0x00,0x00,0x80,0xE0,0xB0,0xE0,0x80,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 
+// 0x00,0x00,0x20,0x78,0x2C,0x78,0x20,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x01,0x00,0x00,0x00,0x10,0x38,0x6C,0x38,0x10,0x00};
 
-void drawImg(const int x, const int y)
+void drawImg(const int x, const int y, uint8_t* img)
 {
   uint8_t height = 16;
   uint8_t width = 32;
@@ -283,9 +312,9 @@ void drawImg(const int x, const int y)
   {
     for (uint8_t i = bytes - 1; i<254; i--) // Vertical Bytes
     {
-      uint8_t data;
-      if( x == 0){data = TestImg[j+(i*width)];} //Test HARDCODE Img
-      else {data = TestImg2[j+(i*width)];}  //Test HARDCODE Img
+      uint8_t data = img[j+(i*width)];
+      // if( x == 0){data = TestImg[j+(i*width)];} //Test HARDCODE Img
+      // else {data = TestImg2[j+(i*width)];}  //Test HARDCODE Img
 
       int offset = (i*8);
       if((i == bytes - 1) && bytes > 1)
